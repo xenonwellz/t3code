@@ -163,7 +163,7 @@ function ExpandableText({
     <div className={cn("min-w-0", className)}>
       <div
         className={cn(
-          "whitespace-pre-wrap break-words",
+          "whitespace-pre-wrap wrap-break-word",
           !expanded && canExpand ? collapsedClassName : null,
         )}
       >
@@ -289,7 +289,7 @@ function formatProcessName(command: string): string {
 
 function formatProcessType(process: ServerProcessDiagnosticsEntry): string {
   if (process.depth > 0) return "Subprocess";
-  if (/\b(codex|claude|opencode|cursor)\b/i.test(process.command)) return "Agent";
+  if (/\b(codex|claude|opencode|cursor|kimi)\b/i.test(process.command)) return "Agent";
   return "Process";
 }
 
@@ -475,7 +475,7 @@ function ProcessDiagnosticsTable({
                   />
                   <TooltipPopup
                     side="top"
-                    className="max-w-[min(440px,calc(100vw-2rem))] whitespace-normal break-words text-left font-mono text-[11px] leading-relaxed text-wrap"
+                    className="max-w-[min(440px,calc(100vw-2rem))] whitespace-normal wrap-break-word text-left font-mono text-[11px] leading-relaxed text-wrap"
                   >
                     {process.command}
                   </TooltipPopup>

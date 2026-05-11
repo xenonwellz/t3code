@@ -1879,6 +1879,78 @@ describe("ProviderRuntimeIngestion", () => {
     expect(assistantEvents[3]?.payload.text).toBe("");
   });
 
+  it("drops assistant streaming deltas while the projected session is interrupted", async () => {
+    const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
+    const startedAt = "2026-06-01T10:00:00.000Z";
+    const interruptAt = "2026-06-01T10:00:01.000Z";
+    const turnId = asTurnId("turn-interrupt-stale-delta");
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-turn-started-interrupt-stale-delta"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: startedAt,
+      threadId: asThreadId("thread-1"),
+      turnId,
+    });
+    await waitForThread(
+      harness.readModel,
+      (thread) => thread.session?.status === "running" && thread.session?.activeTurnId === turnId,
+    );
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-delta-before-interrupt"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: startedAt,
+      threadId: asThreadId("thread-1"),
+      turnId,
+      itemId: asItemId("item-interrupt-stale"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "before interrupt",
+      },
+    });
+    await harness.drain();
+
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.interrupt",
+        commandId: CommandId.make("cmd-interrupt-stale-delta-test"),
+        threadId: ThreadId.make("thread-1"),
+        turnId,
+        createdAt: interruptAt,
+      }),
+    );
+
+    await waitForThread(harness.readModel, (thread) => thread.session?.status === "interrupted");
+
+    harness.emit({
+      type: "content.delta",
+      eventId: asEventId("evt-stale-delta-after-interrupt"),
+      provider: ProviderDriverKind.make("codex"),
+      createdAt: interruptAt,
+      threadId: asThreadId("thread-1"),
+      turnId,
+      itemId: asItemId("item-post-interrupt-segment"),
+      payload: {
+        streamKind: "assistant_text",
+        delta: "must-not-append",
+      },
+    });
+    await harness.drain();
+
+    const readModel = await harness.readModel();
+    const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+    const assistantTexts =
+      thread?.messages
+        .filter((m: ProviderRuntimeTestMessage) => m.role === "assistant")
+        .map((m: ProviderRuntimeTestMessage) => m.text)
+        .join("\n") ?? "";
+    expect(assistantTexts).toContain("before interrupt");
+    expect(assistantTexts).not.toContain("must-not-append");
+  });
+
   it("starts a new streaming assistant message segment after approval", async () => {
     const harness = await createHarness({ serverSettings: { enableAssistantStreaming: true } });
     const startedAt = "2026-03-28T07:00:00.000Z";

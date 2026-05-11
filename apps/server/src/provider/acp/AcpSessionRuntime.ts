@@ -104,6 +104,9 @@ export interface AcpSessionRuntimeShape {
     configId: string,
     value: string | boolean,
   ) => Effect.Effect<EffectAcpSchema.SetSessionConfigOptionResponse, EffectAcpErrors.AcpError>;
+  /** `session/set_model` — used by agents such as Kimi that do not use `session/set_config_option` for models. */
+  readonly setSessionModel: (modelId: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
+  /** `session/set_config_option` for the session's model config option (e.g. Cursor). */
   readonly setModel: (model: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
   readonly request: (
     method: string,
@@ -526,7 +529,12 @@ const makeAcpSessionRuntime = (
           }),
         ),
       cancel: getStartedState.pipe(
-        Effect.flatMap((started) => acp.agent.cancel({ sessionId: started.sessionId })),
+        Effect.flatMap((started) =>
+          closeActiveAssistantSegment({
+            queue: eventQueue,
+            assistantSegmentRef,
+          }).pipe(Effect.andThen(acp.agent.cancel({ sessionId: started.sessionId }))),
+        ),
       ),
       setMode: (modeId) =>
         Ref.get(modeStateRef).pipe(
@@ -541,6 +549,21 @@ const makeAcpSessionRuntime = (
           }),
         ),
       setConfigOption,
+      setSessionModel: (modelId) =>
+        getStartedState.pipe(
+          Effect.flatMap((started) => {
+            const payload = {
+              sessionId: started.sessionId,
+              modelId,
+            } satisfies EffectAcpSchema.SetSessionModelRequest;
+            return runLoggedRequest(
+              "session/set_model",
+              payload,
+              acp.agent.setSessionModel(payload),
+            );
+          }),
+          Effect.asVoid,
+        ),
       setModel: (model) =>
         getStartedState.pipe(
           Effect.flatMap((started) => setConfigOption(started.modelConfigId ?? "model", model)),

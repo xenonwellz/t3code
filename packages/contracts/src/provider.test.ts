@@ -95,6 +95,22 @@ describe("ProviderSessionStartInput", () => {
     expect(getOptionValue(parsed.modelSelection?.options, "fastMode")).toBe(true);
   });
 
+  it("accepts kimi provider", () => {
+    const parsed = decodeProviderSessionStartInput({
+      threadId: "thread-1",
+      provider: "kimi",
+      cwd: "/tmp/workspace",
+      runtimeMode: "full-access",
+      modelSelection: {
+        provider: "kimi",
+        model: "k2",
+      },
+    });
+    expect(parsed.provider).toBe("kimi");
+    expect(parsed.modelSelection?.instanceId).toBe("kimi");
+    expect(parsed.modelSelection?.model).toBe("k2");
+  });
+
   it("accepts fork-provided driver kinds as branded slugs", () => {
     const parsed = decodeProviderSessionStartInput({
       threadId: "thread-1",

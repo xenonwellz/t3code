@@ -184,6 +184,7 @@ export const OpenInPicker = memo(function OpenInPicker({
 
   useEffect(() => {
     const handler = (e: globalThis.KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       const api = readLocalApi();
       if (!isOpenFavoriteEditorShortcut(e, keybindings)) return;
       if (!api || !openInCwd) return;

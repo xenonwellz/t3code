@@ -1333,19 +1333,40 @@ function applyEnvironmentOrchestrationEvent(
       }));
 
     case "thread.turn-interrupt-requested": {
-      if (event.payload.turnId === undefined) {
-        return state;
-      }
       return updateThreadState(state, event.payload.threadId, (thread) => {
+        const interruptedSession =
+          thread.session === null
+            ? null
+            : {
+                ...thread.session,
+                status: "ready" as const,
+                orchestrationStatus: "interrupted" as const,
+                activeTurnId: undefined,
+                updatedAt: event.payload.createdAt,
+              };
         const latestTurn = thread.latestTurn;
-        if (latestTurn === null || latestTurn.turnId !== event.payload.turnId) {
-          return thread;
+        const interruptedTurnId =
+          event.payload.turnId ??
+          thread.session?.activeTurnId ??
+          (latestTurn?.state === "running" ? latestTurn.turnId : undefined);
+
+        if (latestTurn === null || latestTurn.turnId !== interruptedTurnId) {
+          if (interruptedSession === null) {
+            return thread;
+          }
+          return {
+            ...thread,
+            session: interruptedSession,
+            updatedAt: event.occurredAt,
+          };
         }
+
         return {
           ...thread,
+          session: interruptedSession,
           latestTurn: buildLatestTurn({
             previous: latestTurn,
-            turnId: event.payload.turnId,
+            turnId: interruptedTurnId,
             state: "interrupted",
             requestedAt: latestTurn.requestedAt,
             startedAt: latestTurn.startedAt ?? event.payload.createdAt,

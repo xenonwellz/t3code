@@ -8,6 +8,7 @@ import pkg from "./package.json" with { type: "json" };
 const port = Number(process.env.PORT ?? 5733);
 const host = process.env.HOST?.trim() || "localhost";
 const configuredWsUrl = process.env.VITE_WS_URL?.trim();
+const configuredHttpUrl = process.env.VITE_HTTP_URL?.trim();
 const configuredHostedAppChannel = process.env.VITE_HOSTED_APP_CHANNEL?.trim() || "";
 const configuredAppVersion = process.env.APP_VERSION?.trim() || pkg.version;
 const configuredHostedAppUrl = (() => {
@@ -32,13 +33,9 @@ const buildSourcemap =
       ? "hidden"
       : true;
 
-function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
-  if (!wsUrl) {
-    return undefined;
-  }
-
+function stripUrlToHttpOrigin(raw: string): string | undefined {
   try {
-    const url = new URL(wsUrl);
+    const url = new URL(raw);
     if (url.protocol === "ws:") {
       url.protocol = "http:";
     } else if (url.protocol === "wss:") {
@@ -53,7 +50,44 @@ function resolveDevProxyTarget(wsUrl: string | undefined): string | undefined {
   }
 }
 
-const devProxyTarget = resolveDevProxyTarget(configuredWsUrl);
+/** Base URL for dev-only HTTP proxying (`/.well-known`, `/api`, …). */
+function resolveDevProxyTarget(
+  wsUrl: string | undefined,
+  httpUrl: string | undefined,
+): string | undefined {
+  if (wsUrl) {
+    const fromWs = stripUrlToHttpOrigin(wsUrl);
+    if (fromWs) {
+      return fromWs;
+    }
+  }
+  if (httpUrl) {
+    return stripUrlToHttpOrigin(httpUrl);
+  }
+  return undefined;
+}
+
+/**
+ * Prefer `127.0.0.1` over `localhost` for the outbound proxy target so the dev
+ * proxy does not depend on IPv6 `::1` resolution (which can hang or miss a
+ * backend that is only listening on IPv4 loopback).
+ */
+function preferIpv4LoopbackDevProxyTarget(origin: string): string {
+  try {
+    const url = new URL(origin);
+    if (url.hostname === "localhost") {
+      url.hostname = "127.0.0.1";
+    }
+    return url.toString();
+  } catch {
+    return origin;
+  }
+}
+
+const devProxyTargetRaw = resolveDevProxyTarget(configuredWsUrl, configuredHttpUrl);
+const devProxyTarget = devProxyTargetRaw
+  ? preferIpv4LoopbackDevProxyTarget(devProxyTargetRaw)
+  : undefined;
 
 export default defineConfig({
   plugins: [

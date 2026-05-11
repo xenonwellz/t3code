@@ -96,37 +96,45 @@ export function terminalStatusFromRunningIds(
 export function ThreadStatusLabel({
   status,
   compact = false,
+  showIdle = false,
 }: {
-  status: ThreadStatusPill;
+  status: ThreadStatusPill | null;
   compact?: boolean;
+  showIdle?: boolean;
 }) {
-  if (compact) {
+  if (!status && !showIdle) {
+    return null;
+  }
+
+  const label = status?.label ?? "Idle";
+  const containerClassName = "inline-flex size-3.5 shrink-0 items-center justify-center";
+  const colorClassName = status?.colorClass ?? "text-muted-foreground/45";
+
+  if (status?.pulse) {
     return (
-      <span
-        title={status.label}
-        className={`inline-flex size-3.5 shrink-0 items-center justify-center ${status.colorClass}`}
-      >
-        <span
-          className={`size-[9px] rounded-full ${status.dotClass} ${
-            status.pulse ? "animate-pulse" : ""
-          }`}
-        />
-        <span className="sr-only">{status.label}</span>
+      <span title={label} className={`${containerClassName} ${colorClassName}`}>
+        <span aria-hidden="true" className="grid size-3 grid-cols-2 place-items-center gap-[2px]">
+          {[0, 1, 2, 3].map((index) => (
+            <span
+              key={index}
+              className={`size-[3px] rounded-full ${status.dotClass} animate-pulse`}
+              style={{ animationDelay: `${index * 120}ms` }}
+            />
+          ))}
+        </span>
+        <span className="sr-only">{label}</span>
       </span>
     );
   }
 
   return (
-    <span
-      title={status.label}
-      className={`inline-flex items-center gap-1 text-[10px] ${status.colorClass}`}
-    >
+    <span title={label} className={`${containerClassName} ${colorClassName}`}>
       <span
-        className={`h-1.5 w-1.5 rounded-full ${status.dotClass} ${
-          status.pulse ? "animate-pulse" : ""
-        }`}
+        className={`rounded-full ${
+          compact ? "size-[9px]" : "size-1.5"
+        } ${status?.dotClass ?? "bg-muted-foreground/35 dark:bg-muted-foreground/45"}`}
       />
-      <span className="hidden md:inline">{status.label}</span>
+      <span className="sr-only">{label}</span>
     </span>
   );
 }

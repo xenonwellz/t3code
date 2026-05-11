@@ -387,6 +387,14 @@ export function isChatNewShortcut(
   return matchesCommandShortcut(event, keybindings, "chat.new", options);
 }
 
+export function isProjectAddShortcut(
+  event: ShortcutEventLike,
+  keybindings: ResolvedKeybindingsConfig,
+  options?: ShortcutMatchOptions,
+): boolean {
+  return matchesCommandShortcut(event, keybindings, "project.add", options);
+}
+
 export function isChatNewLocalShortcut(
   event: ShortcutEventLike,
   keybindings: ResolvedKeybindingsConfig,

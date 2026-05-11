@@ -8,7 +8,8 @@ import {
   startNewThreadFromContext,
 } from "../lib/chatThreadActions";
 import { isTerminalFocused } from "../lib/terminalFocus";
-import { resolveShortcutCommand } from "../keybindings";
+import { isProjectAddShortcut, resolveShortcutCommand } from "../keybindings";
+import { isMacPlatform } from "../lib/utils";
 import { selectThreadTerminalState, useTerminalStateStore } from "../terminalStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { resolveSidebarNewThreadEnvMode } from "~/components/Sidebar.logic";
@@ -21,6 +22,7 @@ function ChatRouteGlobalShortcuts() {
   const { activeDraftThread, activeThread, defaultProjectRef, handleNewThread, routeThreadRef } =
     useHandleNewThread();
   const keybindings = useServerKeybindings();
+  const openAddProject = useCommandPaletteStore((state) => state.openAddProject);
   const terminalOpen = useTerminalStateStore((state) =>
     routeThreadRef
       ? selectThreadTerminalState(state.terminalStateByThreadKey, routeThreadRef).terminalOpen
@@ -31,11 +33,13 @@ function ChatRouteGlobalShortcuts() {
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
+      const terminalFocus = isTerminalFocused();
+      const shortcutContext = {
+        terminalFocus,
+        terminalOpen,
+      };
       const command = resolveShortcutCommand(event, keybindings, {
-        context: {
-          terminalFocus: isTerminalFocused(),
-          terminalOpen,
-        },
+        context: shortcutContext,
       });
 
       if (useCommandPaletteStore.getState().open) {
@@ -45,6 +49,26 @@ function ChatRouteGlobalShortcuts() {
       if (event.key === "Escape" && selectedThreadKeysSize > 0) {
         event.preventDefault();
         clearSelection();
+        return;
+      }
+
+      const platformModPressed = isMacPlatform(navigator.platform)
+        ? event.metaKey && !event.ctrlKey
+        : event.ctrlKey && !event.metaKey;
+      const isRawProjectAddShortcut =
+        event.key.toLowerCase() === "o" &&
+        platformModPressed &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !terminalFocus;
+      if (
+        command === "project.add" ||
+        isProjectAddShortcut(event, keybindings, { context: shortcutContext }) ||
+        isRawProjectAddShortcut
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        openAddProject();
         return;
       }
 
@@ -88,6 +112,7 @@ function ChatRouteGlobalShortcuts() {
     clearSelection,
     handleNewThread,
     keybindings,
+    openAddProject,
     defaultProjectRef,
     selectedThreadKeysSize,
     terminalOpen,

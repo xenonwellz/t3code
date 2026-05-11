@@ -322,18 +322,39 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
   );
 });
 
+const MAX_COLLAPSED_USER_MESSAGE_LINES = 8;
+const MAX_COLLAPSED_USER_MESSAGE_LENGTH = 600;
+const COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM = 1.75;
+const COLLAPSED_USER_MESSAGE_FADE_MASK = `linear-gradient(to bottom, black calc(100% - ${COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM}rem), transparent)`;
+
+function shouldCollapseUserMessage(text: string): boolean {
+  if (text.trim().length === 0) {
+    return false;
+  }
+
+  return (
+    text.length > MAX_COLLAPSED_USER_MESSAGE_LENGTH ||
+    text.split("\n").length > MAX_COLLAPSED_USER_MESSAGE_LINES
+  );
+}
+
 function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
   const userImages = row.message.attachments ?? [];
   const displayedUserMessage = deriveDisplayedUserMessageState(row.message.text);
   const terminalContexts = displayedUserMessage.contexts;
   const canRevertAgentWork = typeof row.revertTurnCount === "number";
+  const [expanded, setExpanded] = useState(false);
+  const hasVisibleBody =
+    displayedUserMessage.visibleText.trim().length > 0 || terminalContexts.length > 0;
+  const canCollapse = hasVisibleBody && shouldCollapseUserMessage(displayedUserMessage.visibleText);
+  const isCollapsed = canCollapse && !expanded;
 
   return (
-    <div className="flex justify-end">
-      <div className="group relative max-w-[80%] rounded-2xl rounded-br-sm border border-border bg-secondary px-4 py-3">
+    <div className="group w-full min-w-0 space-y-1.5">
+      <div className="relative w-full rounded-lg border border-border bg-secondary px-4 py-3">
         {userImages.length > 0 && (
-          <div className="mb-2 grid max-w-[420px] grid-cols-2 gap-2">
+          <div className="mb-2 grid w-full max-w-full grid-cols-2 gap-2 sm:max-w-[min(100%,420px)]">
             {userImages.map((image: NonNullable<TimelineMessage["attachments"]>[number]) => (
               <div
                 key={image.id}
@@ -365,24 +386,58 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
             ))}
           </div>
         )}
-        <CollapsibleUserMessageBody
-          text={displayedUserMessage.visibleText}
-          terminalContexts={terminalContexts}
-          skills={ctx.skills}
-          footer={
-            <>
-              <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
-                {displayedUserMessage.copyText && (
-                  <MessageCopyButton text={displayedUserMessage.copyText} />
-                )}
-                {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
-              </div>
-              <p className="text-right text-xs text-muted-foreground/50">
-                {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </p>
-            </>
-          }
-        />
+        {hasVisibleBody ? (
+          <div
+            className={cn("relative", isCollapsed && "max-h-44 overflow-hidden")}
+            data-user-message-body="true"
+            data-user-message-collapsed={isCollapsed ? "true" : "false"}
+            data-user-message-collapsible={canCollapse ? "true" : "false"}
+            data-user-message-fade={isCollapsed ? "true" : "false"}
+            style={
+              isCollapsed
+                ? {
+                    WebkitMaskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
+                    maskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
+                  }
+                : undefined
+            }
+          >
+            <UserMessageBody
+              text={displayedUserMessage.visibleText}
+              terminalContexts={terminalContexts}
+              skills={ctx.skills}
+            />
+          </div>
+        ) : null}
+      </div>
+      <div
+        className={cn("flex items-center gap-2", canCollapse ? "justify-between" : "justify-end")}
+        data-user-message-footer="true"
+      >
+        {canCollapse ? (
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost"
+            aria-expanded={expanded}
+            data-scroll-anchor-ignore
+            onClick={() => setExpanded((value) => !value)}
+            className="-ml-1 h-6 shrink-0 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
+          >
+            {expanded ? "Show less" : "Show full message"}
+          </Button>
+        ) : null}
+        <div className="flex items-center gap-2 empty:hidden">
+          <div className="flex items-center gap-1.5 opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover:opacity-100">
+            {displayedUserMessage.copyText && (
+              <MessageCopyButton text={displayedUserMessage.copyText} />
+            )}
+            {canRevertAgentWork && <RevertUserMessageButton messageId={row.message.id} />}
+          </div>
+          <p className="text-right text-xs text-muted-foreground/50">
+            {formatTimestamp(row.message.createdAt, ctx.timestampFormat)}
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -754,88 +809,6 @@ const UserMessageTerminalContextInlineLabel = memo(
     return <TerminalContextInlineChip label={props.context.header} tooltipText={tooltipText} />;
   },
 );
-
-const MAX_COLLAPSED_USER_MESSAGE_LINES = 8;
-const MAX_COLLAPSED_USER_MESSAGE_LENGTH = 600;
-const COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM = 1.75;
-const COLLAPSED_USER_MESSAGE_FADE_MASK = `linear-gradient(to bottom, black calc(100% - ${COLLAPSED_USER_MESSAGE_FADE_HEIGHT_REM}rem), transparent)`;
-
-function shouldCollapseUserMessage(text: string): boolean {
-  if (text.trim().length === 0) {
-    return false;
-  }
-
-  return (
-    text.length > MAX_COLLAPSED_USER_MESSAGE_LENGTH ||
-    text.split("\n").length > MAX_COLLAPSED_USER_MESSAGE_LINES
-  );
-}
-
-const CollapsibleUserMessageBody = memo(function CollapsibleUserMessageBody(props: {
-  text: string;
-  terminalContexts: ParsedTerminalContextEntry[];
-  skills: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">>;
-  footer?: ReactNode;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const hasVisibleBody = props.text.trim().length > 0 || props.terminalContexts.length > 0;
-  const canCollapse = hasVisibleBody && shouldCollapseUserMessage(props.text);
-  const isCollapsed = canCollapse && !expanded;
-
-  return (
-    <div>
-      {hasVisibleBody ? (
-        <div
-          className={cn("relative", isCollapsed && "max-h-44 overflow-hidden")}
-          data-user-message-body="true"
-          data-user-message-collapsed={isCollapsed ? "true" : "false"}
-          data-user-message-collapsible={canCollapse ? "true" : "false"}
-          data-user-message-fade={isCollapsed ? "true" : "false"}
-          style={
-            isCollapsed
-              ? {
-                  WebkitMaskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
-                  maskImage: COLLAPSED_USER_MESSAGE_FADE_MASK,
-                }
-              : undefined
-          }
-        >
-          <UserMessageBody
-            text={props.text}
-            terminalContexts={props.terminalContexts}
-            skills={props.skills}
-          />
-        </div>
-      ) : null}
-      {canCollapse || props.footer ? (
-        <div
-          className={cn(
-            "mt-1.5 flex items-center gap-2",
-            canCollapse && props.footer ? "justify-between" : "justify-end",
-          )}
-          data-user-message-footer="true"
-        >
-          {canCollapse ? (
-            <Button
-              type="button"
-              size="xs"
-              variant="ghost"
-              aria-expanded={expanded}
-              data-scroll-anchor-ignore
-              onClick={() => setExpanded((value) => !value)}
-              className="-ml-1 h-6 rounded-md px-1.5 text-xs text-muted-foreground/72 hover:bg-muted/55 hover:text-foreground/85"
-            >
-              {expanded ? "Show less" : "Show full message"}
-            </Button>
-          ) : null}
-          {props.footer ? (
-            <div className="ml-auto flex items-center gap-2">{props.footer}</div>
-          ) : null}
-        </div>
-      ) : null}
-    </div>
-  );
-});
 
 const UserMessageBody = memo(function UserMessageBody(props: {
   text: string;

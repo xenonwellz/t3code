@@ -10,7 +10,7 @@
  *
  *  2. **Many drivers, one registry** — the "all drivers slice" describe
  *     block below configures one instance of every shipped driver
- *     (`codex`, `claudeAgent`, `cursor`, `opencode`) in a single
+ *     (`codex`, `claudeAgent`, `cursor`, `kimi`, `opencode`) in a single
  *     `ProviderInstanceConfigMap` and asserts the registry boots them all
  *     without cross-contamination. This proves the driver SPI is uniform
  *     across every provider — any driver plugs into the registry through
@@ -28,6 +28,7 @@ import {
   type ClaudeSettings,
   type CodexSettings,
   type CursorSettings,
+  type KimiSettings,
   type OpenCodeSettings,
   ProviderDriverKind,
   type ProviderInstanceConfigMap,
@@ -41,6 +42,7 @@ import { ServerConfig } from "../../config.ts";
 import { ClaudeDriver } from "../Drivers/ClaudeDriver.ts";
 import { CodexDriver } from "../Drivers/CodexDriver.ts";
 import { CursorDriver } from "../Drivers/CursorDriver.ts";
+import { KimiDriver } from "../Drivers/KimiDriver.ts";
 import { OpenCodeDriver } from "../Drivers/OpenCodeDriver.ts";
 import { OpenCodeRuntimeLive } from "../opencodeRuntime.ts";
 import { NoOpProviderEventLoggers, ProviderEventLoggers } from "./ProviderEventLoggers.ts";
@@ -84,6 +86,14 @@ const makeOpenCodeConfig = (overrides: Partial<OpenCodeSettings>): OpenCodeSetti
   binaryPath: "opencode",
   serverUrl: "",
   serverPassword: "",
+  customModels: [],
+  ...overrides,
+});
+
+const makeKimiConfig = (overrides: Partial<KimiSettings>): KimiSettings => ({
+  enabled: false,
+  binaryPath: "kimi",
+  launchArgs: "",
   customModels: [],
   ...overrides,
 });
@@ -218,7 +228,7 @@ describe("ProviderInstanceRegistryLive — multi-instance codex slice", () => {
 });
 
 describe("ProviderInstanceRegistryLive — all drivers slice", () => {
-  // All four drivers need `NodeServices` (ChildProcessSpawner + FileSystem +
+  // All built-in drivers need `NodeServices` (ChildProcessSpawner + FileSystem +
   // Path). `OpenCodeDriver.create` additionally yields `OpenCodeRuntime`
   // at construction time, so we wire `OpenCodeRuntimeLive` into the stack.
   // `OpenCodeRuntimeLive` bundles its own `NetService.layer` via
@@ -244,11 +254,13 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       const codexId = ProviderInstanceId.make("codex_default");
       const claudeId = ProviderInstanceId.make("claude_default");
       const cursorId = ProviderInstanceId.make("cursor_default");
+      const kimiId = ProviderInstanceId.make("kimi_default");
       const openCodeId = ProviderInstanceId.make("opencode_default");
 
       const codexDriverKind = ProviderDriverKind.make("codex");
       const claudeDriverKind = ProviderDriverKind.make("claudeAgent");
       const cursorDriverKind = ProviderDriverKind.make("cursor");
+      const kimiDriverKind = ProviderDriverKind.make("kimi");
       const openCodeDriverKind = ProviderDriverKind.make("opencode");
 
       const configMap: ProviderInstanceConfigMap = {
@@ -273,6 +285,12 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
           enabled: false,
           config: makeCursorConfig({}),
         },
+        [kimiId]: {
+          driver: kimiDriverKind,
+          displayName: "Kimi",
+          enabled: false,
+          config: makeKimiConfig({}),
+        },
         [openCodeId]: {
           driver: openCodeDriverKind,
           displayName: "OpenCode",
@@ -282,7 +300,7 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       };
 
       const { registry } = yield* makeProviderInstanceRegistry({
-        drivers: [CodexDriver, ClaudeDriver, CursorDriver, OpenCodeDriver],
+        drivers: [CodexDriver, ClaudeDriver, CursorDriver, KimiDriver, OpenCodeDriver],
         configMap,
       });
 
@@ -292,9 +310,9 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(unavailable).toEqual([]);
 
       const instances = yield* registry.listInstances;
-      expect(instances).toHaveLength(4);
+      expect(instances).toHaveLength(5);
       expect(instances.map((instance) => instance.instanceId).toSorted()).toEqual(
-        [codexId, claudeId, cursorId, openCodeId].toSorted(),
+        [codexId, claudeId, cursorId, kimiId, openCodeId].toSorted(),
       );
 
       // Instance lookup by id resolves each instance to its own bundle —
@@ -303,14 +321,17 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       const codex = yield* registry.getInstance(codexId);
       const claude = yield* registry.getInstance(claudeId);
       const cursor = yield* registry.getInstance(cursorId);
+      const kimi = yield* registry.getInstance(kimiId);
       const openCode = yield* registry.getInstance(openCodeId);
       expect(codex?.driverKind).toBe(codexDriverKind);
       expect(claude?.driverKind).toBe(claudeDriverKind);
       expect(cursor?.driverKind).toBe(cursorDriverKind);
+      expect(kimi?.driverKind).toBe(kimiDriverKind);
       expect(openCode?.driverKind).toBe(openCodeDriverKind);
       expect(codex?.displayName).toBe("Codex");
       expect(claude?.displayName).toBe("Claude");
       expect(cursor?.displayName).toBe("Cursor");
+      expect(kimi?.displayName).toBe("Kimi");
       expect(openCode?.displayName).toBe("OpenCode");
 
       // Every instance owns its own set of closures — no sharing across
@@ -318,16 +339,29 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       // distinct references even when two instances happen to share a
       // trait (e.g. Cursor + others all use a stub-or-real
       // `textGeneration`; they must still be different object values).
-      const adapters = [codex!.adapter, claude!.adapter, cursor!.adapter, openCode!.adapter];
+      const adapters = [
+        codex!.adapter,
+        claude!.adapter,
+        cursor!.adapter,
+        kimi!.adapter,
+        openCode!.adapter,
+      ];
       expect(new Set(adapters).size).toBe(adapters.length);
       const textGenerations = [
         codex!.textGeneration,
         claude!.textGeneration,
         cursor!.textGeneration,
+        kimi!.textGeneration,
         openCode!.textGeneration,
       ];
       expect(new Set(textGenerations).size).toBe(textGenerations.length);
-      const snapshots = [codex!.snapshot, claude!.snapshot, cursor!.snapshot, openCode!.snapshot];
+      const snapshots = [
+        codex!.snapshot,
+        claude!.snapshot,
+        cursor!.snapshot,
+        kimi!.snapshot,
+        openCode!.snapshot,
+      ];
       expect(new Set(snapshots).size).toBe(snapshots.length);
 
       // Snapshots identify themselves by `instanceId` + `driver` so
@@ -355,6 +389,12 @@ describe("ProviderInstanceRegistryLive — all drivers slice", () => {
       expect(cursorSnapshot.continuation?.groupKey).toBe(
         `${cursorDriverKind}:instance:${cursorId}`,
       );
+
+      const kimiSnapshot = yield* kimi!.snapshot.getSnapshot;
+      expect(kimiSnapshot.instanceId).toBe(kimiId);
+      expect(kimiSnapshot.driver).toBe(kimiDriverKind);
+      expect(kimiSnapshot.enabled).toBe(false);
+      expect(kimiSnapshot.continuation?.groupKey).toBe(`${kimiDriverKind}:instance:${kimiId}`);
 
       const openCodeSnapshot = yield* openCode!.snapshot.getSnapshot;
       expect(openCodeSnapshot.instanceId).toBe(openCodeId);

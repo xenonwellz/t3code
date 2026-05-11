@@ -1194,6 +1194,8 @@ const make = Effect.gen(function* () {
       const now = event.createdAt;
       const eventTurnId = toTurnId(event.turnId);
       const activeTurnId = thread.session?.activeTurnId ?? null;
+      /** After interrupt, ignore stray ACP assistant stream events until the session is ready again. */
+      const sessionInterrupted = thread.session?.status === "interrupted";
 
       const conflictsWithActiveTurn =
         activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
@@ -1322,7 +1324,7 @@ const make = Effect.gen(function* () {
       const proposedPlanDelta =
         event.type === "turn.proposed.delta" ? event.payload.delta : undefined;
 
-      if (assistantDelta && assistantDelta.length > 0) {
+      if (assistantDelta && assistantDelta.length > 0 && !sessionInterrupted) {
         const turnId = toTurnId(event.turnId);
         const assistantMessageId = yield* getOrCreateAssistantMessageId({
           threadId: thread.id,
@@ -1431,7 +1433,7 @@ const make = Effect.gen(function* () {
             }
           : undefined;
 
-      if (assistantCompletion) {
+      if (assistantCompletion && !sessionInterrupted) {
         const detailedThread = yield* getLoadedThreadDetail();
         const messages = detailedThread?.messages ?? [];
         const turnId = toTurnId(event.turnId);

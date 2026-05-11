@@ -550,10 +550,10 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Unread", pulse: false });
   });
 
-  it("shows completed when there is an unseen completion and no active blocker", () => {
+  it("shows unread when there is an unseen completion and no active blocker", () => {
     expect(
       resolveThreadStatusPill({
         thread: {
@@ -568,7 +568,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Completed", pulse: false });
+    ).toMatchObject({ label: "Unread", pulse: false });
   });
 });
 
@@ -605,7 +605,7 @@ describe("resolveProjectStatusIndicator", () => {
     expect(
       resolveProjectStatusIndicator([
         {
-          label: "Completed",
+          label: "Unread",
           colorClass: "text-emerald-600",
           dotClass: "bg-emerald-500",
           pulse: false,
@@ -630,7 +630,7 @@ describe("resolveProjectStatusIndicator", () => {
     expect(
       resolveProjectStatusIndicator([
         {
-          label: "Completed",
+          label: "Unread",
           colorClass: "text-emerald-600",
           dotClass: "bg-emerald-500",
           pulse: false,

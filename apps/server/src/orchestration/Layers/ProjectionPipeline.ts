@@ -721,6 +721,22 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
           return;
         }
 
+        case "thread.turn-interrupt-requested": {
+          const existingRow = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingRow)) {
+            return;
+          }
+          yield* projectionThreadRepository.upsert({
+            ...existingRow.value,
+            latestTurnId: event.payload.turnId ?? existingRow.value.latestTurnId,
+            updatedAt: event.occurredAt,
+          });
+          yield* refreshThreadShellSummary(event.payload.threadId);
+          return;
+        }
+
         case "thread.turn-diff-completed": {
           const existingRow = yield* projectionThreadRepository.getById({
             threadId: event.payload.threadId,
@@ -965,19 +981,39 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
     const applyThreadSessionsProjection: ProjectorDefinition["apply"] = Effect.fn(
       "applyThreadSessionsProjection",
     )(function* (event, _attachmentSideEffects) {
-      if (event.type !== "thread.session-set") {
-        return;
+      switch (event.type) {
+        case "thread.session-set":
+          yield* projectionThreadSessionRepository.upsert({
+            threadId: event.payload.threadId,
+            status: event.payload.session.status,
+            providerName: event.payload.session.providerName,
+            providerInstanceId: event.payload.session.providerInstanceId ?? null,
+            runtimeMode: event.payload.session.runtimeMode,
+            activeTurnId: event.payload.session.activeTurnId,
+            lastError: event.payload.session.lastError,
+            updatedAt: event.payload.session.updatedAt,
+          });
+          return;
+
+        case "thread.turn-interrupt-requested": {
+          const existingSession = yield* projectionThreadSessionRepository.getByThreadId({
+            threadId: event.payload.threadId,
+          });
+          if (Option.isNone(existingSession)) {
+            return;
+          }
+          yield* projectionThreadSessionRepository.upsert({
+            ...existingSession.value,
+            status: "interrupted",
+            activeTurnId: null,
+            updatedAt: event.payload.createdAt,
+          });
+          return;
+        }
+
+        default:
+          return;
       }
-      yield* projectionThreadSessionRepository.upsert({
-        threadId: event.payload.threadId,
-        status: event.payload.session.status,
-        providerName: event.payload.session.providerName,
-        providerInstanceId: event.payload.session.providerInstanceId ?? null,
-        runtimeMode: event.payload.session.runtimeMode,
-        activeTurnId: event.payload.session.activeTurnId,
-        lastError: event.payload.session.lastError,
-        updatedAt: event.payload.session.updatedAt,
-      });
     });
 
     const applyThreadTurnsProjection: ProjectorDefinition["apply"] = Effect.fn(
@@ -1122,12 +1158,21 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
         }
 
         case "thread.turn-interrupt-requested": {
-          if (event.payload.turnId === undefined) {
+          const existingThread = yield* projectionThreadRepository.getById({
+            threadId: event.payload.threadId,
+          });
+          const turnId =
+            event.payload.turnId ??
+            existingThread.pipe(
+              Option.map((row) => row.latestTurnId),
+              Option.getOrNull,
+            );
+          if (turnId === null) {
             return;
           }
           const existingTurn = yield* projectionTurnRepository.getByTurnId({
             threadId: event.payload.threadId,
-            turnId: event.payload.turnId,
+            turnId,
           });
           if (Option.isSome(existingTurn)) {
             yield* projectionTurnRepository.upsertByTurnId({
@@ -1140,7 +1185,7 @@ const makeOrchestrationProjectionPipeline = Effect.fn("makeOrchestrationProjecti
             return;
           }
           yield* projectionTurnRepository.upsertByTurnId({
-            turnId: event.payload.turnId,
+            turnId,
             threadId: event.payload.threadId,
             pendingMessageId: null,
             sourceProposedPlanThreadId: null,

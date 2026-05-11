@@ -3,6 +3,7 @@ import {
   DEFAULT_MODEL,
   defaultInstanceIdForDriver,
   type EnvironmentId,
+  EventId,
   type MessageId,
   type ModelSelection,
   type ProjectScript,
@@ -2914,12 +2915,36 @@ export default function ChatView(props: ChatViewProps) {
   const onInterrupt = async () => {
     const api = readEnvironmentApi(environmentId);
     if (!api || !activeThread) return;
-    await api.orchestration.dispatchCommand({
+    const commandId = newCommandId();
+    const createdAt = new Date().toISOString();
+    const turnId = activeLatestTurn?.turnId ?? activeThread.session?.activeTurnId;
+    const receipt = await api.orchestration.dispatchCommand({
       type: "thread.turn.interrupt",
-      commandId: newCommandId(),
+      commandId,
       threadId: activeThread.id,
-      createdAt: new Date().toISOString(),
+      ...(turnId !== undefined ? { turnId } : {}),
+      createdAt,
     });
+    useStore.getState().applyOrchestrationEvent(
+      {
+        sequence: receipt.sequence,
+        eventId: EventId.make(`local-${commandId}`),
+        aggregateKind: "thread",
+        aggregateId: activeThread.id,
+        occurredAt: createdAt,
+        commandId,
+        causationEventId: null,
+        correlationId: null,
+        metadata: {},
+        type: "thread.turn-interrupt-requested",
+        payload: {
+          threadId: activeThread.id,
+          ...(turnId !== undefined ? { turnId } : {}),
+          createdAt,
+        },
+      },
+      environmentId,
+    );
   };
 
   const onRespondToApproval = useCallback(
