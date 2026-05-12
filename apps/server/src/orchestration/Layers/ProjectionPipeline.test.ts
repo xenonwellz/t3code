@@ -1513,6 +1513,125 @@ it.layer(BaseTestLayer)("OrchestrationProjectionPipeline", (it) => {
       }),
   );
 
+  it.effect("clears the projected running session when a turn interrupt is requested", () =>
+    Effect.gen(function* () {
+      const projectionPipeline = yield* OrchestrationProjectionPipeline;
+      const eventStore = yield* OrchestrationEventStore;
+      const sql = yield* SqlClient.SqlClient;
+      const appendAndProject = (event: Parameters<typeof eventStore.append>[0]) =>
+        eventStore
+          .append(event)
+          .pipe(Effect.flatMap((savedEvent) => projectionPipeline.projectEvent(savedEvent)));
+
+      yield* appendAndProject({
+        type: "project.created",
+        eventId: EventId.make("evt-interrupt-session-1"),
+        aggregateKind: "project",
+        aggregateId: ProjectId.make("project-interrupt-session"),
+        occurredAt: "2026-02-26T14:00:00.000Z",
+        commandId: CommandId.make("cmd-interrupt-session-1"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-interrupt-session-1"),
+        metadata: {},
+        payload: {
+          projectId: ProjectId.make("project-interrupt-session"),
+          title: "Project Interrupt Session",
+          workspaceRoot: "/tmp/project-interrupt-session",
+          defaultModelSelection: null,
+          scripts: [],
+          createdAt: "2026-02-26T14:00:00.000Z",
+          updatedAt: "2026-02-26T14:00:00.000Z",
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.created",
+        eventId: EventId.make("evt-interrupt-session-2"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-interrupt-session"),
+        occurredAt: "2026-02-26T14:00:01.000Z",
+        commandId: CommandId.make("cmd-interrupt-session-2"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-interrupt-session-2"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-interrupt-session"),
+          projectId: ProjectId.make("project-interrupt-session"),
+          title: "Thread Interrupt Session",
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5-codex",
+          },
+          runtimeMode: "full-access",
+          branch: null,
+          worktreePath: null,
+          createdAt: "2026-02-26T14:00:01.000Z",
+          updatedAt: "2026-02-26T14:00:01.000Z",
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.session-set",
+        eventId: EventId.make("evt-interrupt-session-3"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-interrupt-session"),
+        occurredAt: "2026-02-26T14:00:02.000Z",
+        commandId: CommandId.make("cmd-interrupt-session-3"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-interrupt-session-3"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-interrupt-session"),
+          session: {
+            threadId: ThreadId.make("thread-interrupt-session"),
+            status: "running",
+            providerName: "codex",
+            runtimeMode: "full-access",
+            activeTurnId: TurnId.make("turn-interrupt-session"),
+            lastError: null,
+            updatedAt: "2026-02-26T14:00:02.000Z",
+          },
+        },
+      });
+
+      yield* appendAndProject({
+        type: "thread.turn-interrupt-requested",
+        eventId: EventId.make("evt-interrupt-session-4"),
+        aggregateKind: "thread",
+        aggregateId: ThreadId.make("thread-interrupt-session"),
+        occurredAt: "2026-02-26T14:00:03.000Z",
+        commandId: CommandId.make("cmd-interrupt-session-4"),
+        causationEventId: null,
+        correlationId: CorrelationId.make("cmd-interrupt-session-4"),
+        metadata: {},
+        payload: {
+          threadId: ThreadId.make("thread-interrupt-session"),
+          createdAt: "2026-02-26T14:00:03.000Z",
+        },
+      });
+
+      const sessionRows = yield* sql<{
+        readonly status: string;
+        readonly activeTurnId: string | null;
+      }>`
+        SELECT status, active_turn_id AS "activeTurnId"
+        FROM projection_thread_sessions
+        WHERE thread_id = 'thread-interrupt-session'
+      `;
+      assert.deepEqual(sessionRows, [{ status: "interrupted", activeTurnId: null }]);
+
+      const turnRows = yield* sql<{
+        readonly turnId: string;
+        readonly status: string;
+      }>`
+        SELECT turn_id AS "turnId", state AS "status"
+        FROM projection_turns
+        WHERE thread_id = 'thread-interrupt-session'
+      `;
+      assert.deepEqual(turnRows, [{ turnId: "turn-interrupt-session", status: "interrupted" }]);
+    }),
+  );
+
   it.effect("clears stale pending approvals from projected shell summaries", () =>
     Effect.gen(function* () {
       const projectionPipeline = yield* OrchestrationProjectionPipeline;

@@ -618,13 +618,17 @@ export const ProviderRegistryLive = Layer.effect(
       }),
     );
 
-    // Seed `providersRef` with the boot-time fallback snapshots so
-    // consumers calling `getProviders` immediately after layer build see
-    // a populated list — even before the first `syncLiveSources` refresh
-    // resolves. Cached snapshots (already in `providersRef`) merge with
-    // these via `upsertProviders` so on-disk state wins where present
-    // and pending fallbacks fill the gaps.
-    yield* upsertProviders(fallbackProviders, { publish: false });
+    const bootUnavailableProviders = yield* instanceRegistry.listUnavailable;
+
+    // Seed `providersRef` with the boot-time fallback and unavailable snapshots
+    // so consumers calling `getProviders` immediately after layer build see a
+    // populated list — even before the first `syncLiveSources` refresh resolves.
+    // Cached snapshots (already in `providersRef`) merge with these via
+    // `upsertProviders` so on-disk state wins where present and pending
+    // fallbacks fill the gaps.
+    yield* upsertProviders([...fallbackProviders, ...bootUnavailableProviders], {
+      publish: false,
+    });
     // Subscribe to registry mutations BEFORE running the initial sync.
     // `subscribeChanges` acquires the dequeue synchronously in this
     // fibre; the subscription is active the instant this `yield*`
@@ -655,9 +659,10 @@ export const ProviderRegistryLive = Layer.effect(
     // instance never propagate to the aggregator's `providersRef`.)
     const instanceChanges = yield* instanceRegistry.subscribeChanges;
     // Initial sync: subscribe + kick off refreshes for every instance
-    // present at boot. Run synchronously so consumers pulling immediately
-    // after the layer build see the correct aggregator state.
-    yield* syncLiveSources;
+    // present at boot. Do not block layer construction on live provider
+    // probes: bootstrap HTTP routes (`/.well-known`, auth session) must stay
+    // responsive even if a provider CLI or SDK hangs during status refresh.
+    yield* syncLiveSourcesAndContinue.pipe(Effect.forkScoped);
     // React to registry mutations — instance added / removed / rebuilt.
     // `Stream.fromSubscription` builds a stream over the pre-acquired
     // subscription rather than subscribing on stream start, which is

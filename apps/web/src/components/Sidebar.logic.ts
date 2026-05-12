@@ -26,13 +26,7 @@ type SidebarProject = {
 export type ThreadTraversalDirection = "previous" | "next";
 
 export interface ThreadStatusPill {
-  label:
-    | "Working"
-    | "Connecting"
-    | "Completed"
-    | "Pending Approval"
-    | "Awaiting Input"
-    | "Plan Ready";
+  label: "Working" | "Connecting" | "Unread" | "Pending Approval" | "Awaiting Input" | "Plan Ready";
   colorClass: string;
   dotClass: string;
   pulse: boolean;
@@ -44,7 +38,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
   Working: 3,
   Connecting: 3,
   "Plan Ready": 2,
-  Completed: 1,
+  Unread: 1,
 };
 
 type ThreadStatusInput = Pick<
@@ -300,30 +294,33 @@ export function resolveThreadRowClassName(input: {
   isSelected: boolean;
 }): string {
   const baseClassName =
-    "h-7 w-full translate-x-0 cursor-pointer justify-start px-2 text-left select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring";
+    "h-[30px] w-full translate-x-0 cursor-pointer justify-start px-2.5 text-left select-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring";
 
   if (input.isSelected && input.isActive) {
     return cn(
       baseClassName,
-      "bg-primary/22 text-foreground font-medium hover:bg-primary/26 hover:text-foreground dark:bg-primary/30 dark:hover:bg-primary/36",
+      "bg-primary/22 text-foreground/90 font-medium hover:bg-primary/26 hover:text-foreground/95 dark:bg-primary/30 dark:hover:bg-primary/36",
     );
   }
 
   if (input.isSelected) {
     return cn(
       baseClassName,
-      "bg-primary/15 text-foreground hover:bg-primary/19 hover:text-foreground dark:bg-primary/22 dark:hover:bg-primary/28",
+      "bg-primary/15 text-foreground/90 hover:bg-primary/19 hover:text-foreground/95 dark:bg-primary/22 dark:hover:bg-primary/28",
     );
   }
 
   if (input.isActive) {
     return cn(
       baseClassName,
-      "bg-accent/85 text-foreground font-medium hover:bg-accent hover:text-foreground dark:bg-accent/55 dark:hover:bg-accent/70",
+      "bg-accent/85 text-foreground/90 font-medium hover:bg-accent hover:text-foreground/95 dark:bg-accent/55 dark:hover:bg-accent/70",
     );
   }
 
-  return cn(baseClassName, "text-muted-foreground hover:bg-accent hover:text-foreground");
+  return cn(
+    baseClassName,
+    "text-foreground/70 hover:bg-accent hover:text-foreground/88 dark:text-foreground/74",
+  );
 }
 
 export function resolveThreadStatusPill(input: {
@@ -383,9 +380,9 @@ export function resolveThreadStatusPill(input: {
 
   if (hasUnseenCompletion(thread)) {
     return {
-      label: "Completed",
-      colorClass: "text-emerald-600 dark:text-emerald-300/90",
-      dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
+      label: "Unread",
+      colorClass: "text-primary",
+      dotClass: "bg-primary",
       pulse: false,
     };
   }

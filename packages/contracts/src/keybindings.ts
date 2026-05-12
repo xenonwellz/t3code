@@ -54,6 +54,7 @@ const STATIC_KEYBINDING_COMMANDS = [
   "terminal.close",
   "diff.toggle",
   "commandPalette.toggle",
+  "project.add",
   "chat.new",
   "chat.newLocal",
   "editor.openFavorite",

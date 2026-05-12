@@ -14,6 +14,7 @@ import {
   modelPickerJumpCommandForIndex,
   modelPickerJumpIndexFromCommand,
   isOpenFavoriteEditorShortcut,
+  isProjectAddShortcut,
   isTerminalClearShortcut,
   isTerminalCloseShortcut,
   isTerminalNewShortcut,
@@ -117,7 +118,7 @@ const DEFAULT_BINDINGS = compile([
   },
   { shortcut: modShortcut("o", { shiftKey: true }), command: "chat.new" },
   { shortcut: modShortcut("n", { shiftKey: true }), command: "chat.newLocal" },
-  { shortcut: modShortcut("o"), command: "editor.openFavorite" },
+  { shortcut: modShortcut("o"), command: "project.add" },
   { shortcut: modShortcut("[", { shiftKey: true }), command: "thread.previous" },
   { shortcut: modShortcut("]", { shiftKey: true }), command: "thread.next" },
   { shortcut: modShortcut("1"), command: "thread.jump.1" },
@@ -295,10 +296,7 @@ describe("shortcutLabelForCommand", () => {
       shortcutLabelForCommand(DEFAULT_BINDINGS, "modelPicker.toggle", "Linux"),
       "Ctrl+Shift+M",
     );
-    assert.strictEqual(
-      shortcutLabelForCommand(DEFAULT_BINDINGS, "editor.openFavorite", "Linux"),
-      "Ctrl+O",
-    );
+    assert.strictEqual(shortcutLabelForCommand(DEFAULT_BINDINGS, "project.add", "Linux"), "Ctrl+O");
     assert.strictEqual(
       shortcutLabelForCommand(DEFAULT_BINDINGS, "thread.jump.3", "MacIntel"),
       "⌘3",
@@ -448,15 +446,24 @@ describe("chat/editor shortcuts", () => {
     );
   });
 
-  it("matches editor.openFavorite shortcut", () => {
+  it("matches project.add shortcut", () => {
     assert.isTrue(
-      isOpenFavoriteEditorShortcut(event({ key: "o", metaKey: true }), DEFAULT_BINDINGS, {
+      isProjectAddShortcut(event({ key: "o", metaKey: true }), DEFAULT_BINDINGS, {
         platform: "MacIntel",
       }),
     );
     assert.isTrue(
-      isOpenFavoriteEditorShortcut(event({ key: "o", ctrlKey: true }), DEFAULT_BINDINGS, {
+      isProjectAddShortcut(event({ key: "o", ctrlKey: true }), DEFAULT_BINDINGS, {
         platform: "Linux",
+      }),
+    );
+  });
+
+  it("still supports editor.openFavorite when explicitly bound", () => {
+    const bindings = compile([{ shortcut: modShortcut("e"), command: "editor.openFavorite" }]);
+    assert.isTrue(
+      isOpenFavoriteEditorShortcut(event({ key: "e", metaKey: true }), bindings, {
+        platform: "MacIntel",
       }),
     );
   });

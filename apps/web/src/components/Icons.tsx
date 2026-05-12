@@ -199,6 +199,23 @@ export const CursorIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+/** Official Kimi app icon from Moonshot AI brand assets. */
+export const KimiIcon: Icon = ({ className, ...props }) => (
+  <svg
+    {...props}
+    viewBox="0 0 1024 1024"
+    aria-hidden
+    className={cn("overflow-hidden rounded-[22%]", className)}
+  >
+    <image
+      href="/kimi-icon-rounded-corner.png"
+      width="1024"
+      height="1024"
+      preserveAspectRatio="xMidYMid meet"
+    />
+  </svg>
+);
+
 export const TraeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 24 24" fill="currentColor">
     {/* Back rectangle: left strip + bottom strip drawn separately — empty bottom-left corner is the gap between them */}

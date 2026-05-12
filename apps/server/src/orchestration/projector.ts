@@ -26,6 +26,7 @@ import {
   ThreadRevertedPayload,
   ThreadSessionSetPayload,
   ThreadTurnDiffCompletedPayload,
+  ThreadTurnInterruptRequestedPayload,
 } from "./Schemas.ts";
 
 type ThreadPatch = Partial<Omit<OrchestrationThread, "id" | "projectId">>;
@@ -462,6 +463,51 @@ export function projectEvent(
                         : null,
                   }
                 : thread.latestTurn,
+            updatedAt: event.occurredAt,
+          }),
+        };
+      });
+
+    case "thread.turn-interrupt-requested":
+      return Effect.gen(function* () {
+        const payload = yield* decodeForEvent(
+          ThreadTurnInterruptRequestedPayload,
+          event.payload,
+          event.type,
+          "payload",
+        );
+        const thread = nextBase.threads.find((entry) => entry.id === payload.threadId);
+        if (!thread) {
+          return nextBase;
+        }
+
+        const interruptedTurnId =
+          payload.turnId ??
+          thread.session?.activeTurnId ??
+          (thread.latestTurn?.state === "running" ? thread.latestTurn.turnId : null);
+        const latestTurn =
+          thread.latestTurn !== null && thread.latestTurn.turnId === interruptedTurnId
+            ? {
+                ...thread.latestTurn,
+                state: "interrupted" as const,
+                startedAt: thread.latestTurn.startedAt ?? payload.createdAt,
+                completedAt: thread.latestTurn.completedAt ?? payload.createdAt,
+              }
+            : thread.latestTurn;
+
+        return {
+          ...nextBase,
+          threads: updateThread(nextBase.threads, payload.threadId, {
+            session:
+              thread.session === null
+                ? null
+                : {
+                    ...thread.session,
+                    status: "interrupted",
+                    activeTurnId: null,
+                    updatedAt: payload.createdAt,
+                  },
+            latestTurn,
             updatedAt: event.occurredAt,
           }),
         };

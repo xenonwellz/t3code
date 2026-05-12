@@ -934,14 +934,14 @@ export function ProviderSettingsPanel() {
     () => new Map(providerUpdateCandidates.map((candidate) => [candidate.instanceId, candidate])),
     [providerUpdateCandidates],
   );
-  const visibleProviderSettings = PROVIDER_SETTINGS.filter(
-    (providerSettings) =>
-      providerSettings.provider !== "cursor" ||
-      serverProviders.some(
-        (provider) =>
-          provider.instanceId === defaultInstanceIdForDriver(ProviderDriverKind.make("cursor")),
-      ),
-  );
+  const visibleProviderSettings = PROVIDER_SETTINGS.filter((providerSettings) => {
+    if (providerSettings.provider === "cursor" || providerSettings.provider === "kimi") {
+      return serverProviders.some(
+        (provider) => provider.instanceId === defaultInstanceIdForDriver(providerSettings.provider),
+      );
+    }
+    return true;
+  });
   const textGenerationModelSelection = resolveAppModelSelectionState(settings, serverProviders);
   const textGenInstanceId = textGenerationModelSelection.instanceId;
   const lastCheckedAt =
